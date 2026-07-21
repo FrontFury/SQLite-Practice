@@ -1,13 +1,16 @@
 package com.example.student_directory
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.ImageButton
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -15,13 +18,61 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
+import coil.load
+import coil.transform.CircleCropTransformation
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
+
+    private var selectedImageUri: Uri? = null
+    private var ivPreview: ImageView? = null
+
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            val internalUri = copyUriToInternalStorage(it)
+            selectedImageUri = internalUri
+            if (internalUri != null && internalUri.scheme == "file") {
+                ivPreview?.load(File(internalUri.path!!)) {
+                    crossfade(true)
+                    transformations(CircleCropTransformation())
+                }
+            } else {
+                ivPreview?.load(internalUri) {
+                    crossfade(true)
+                    transformations(CircleCropTransformation())
+                }
+            }
+            ivPreview?.imageTintList = null
+        }
+    }
+
+    private fun copyUriToInternalStorage(uri: Uri): Uri? {
+        return try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val fileName = "student_${System.currentTimeMillis()}.jpg"
+            val file = File(filesDir, fileName)
+            val outputStream = FileOutputStream(file)
+            inputStream?.copyTo(outputStream)
+            inputStream?.close()
+            outputStream.close()
+            Uri.fromFile(file)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
 
     private val viewModel: StudentViewModel by viewModels {
         val database = StudentDatabase.getDatabase(this)
@@ -55,6 +106,71 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
+        // Swipe to Delete
+        val deleteIcon = ContextCompat.getDrawable(this, android.R.drawable.ic_menu_delete)
+        val intrinsicWidth = deleteIcon?.intrinsicWidth ?: 0
+        val intrinsicHeight = deleteIcon?.intrinsicHeight ?: 0
+        val background = ColorDrawable()
+        val backgroundColor = Color.parseColor("#f44336")
+
+        ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean = false
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val position = viewHolder.adapterPosition
+                val student = adapter.currentList[position]
+                
+                viewModel.delete(student)
+                
+                Snackbar.make(recyclerView, "${student.name} deleted", Snackbar.LENGTH_LONG)
+                    .setAnchorView(fabAdd)
+                    .setAction("Undo") {
+                        viewModel.insert(student)
+                    }.show()
+            }
+
+            override fun onChildDraw(
+                c: Canvas,
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                dX: Float,
+                dY: Float,
+                actionState: Int,
+                isCurrentlyActive: Boolean
+            ) {
+                val itemView = viewHolder.itemView
+                val itemHeight = itemView.bottom - itemView.top
+
+                // Draw the red delete background
+                background.color = backgroundColor
+                if (dX > 0) { // Swiping to the right
+                    background.setBounds(itemView.left, itemView.top, itemView.left + dX.toInt(), itemView.bottom)
+                } else { // Swiping to the left
+                    background.setBounds(itemView.right + dX.toInt(), itemView.top, itemView.right, itemView.bottom)
+                }
+                background.draw(c)
+
+                // Calculate position of delete icon
+                val deleteIconTop = itemView.top + (itemHeight - intrinsicHeight) / 2
+                val deleteIconMargin = (itemHeight - intrinsicHeight) / 2
+                val deleteIconLeft = if (dX > 0) itemView.left + deleteIconMargin else itemView.right - deleteIconMargin - intrinsicWidth
+                val deleteIconRight = if (dX > 0) itemView.left + deleteIconMargin + intrinsicWidth else itemView.right - deleteIconMargin
+                val deleteIconBottom = deleteIconTop + intrinsicHeight
+
+                // Draw the delete icon
+                if (dX != 0f) {
+                    deleteIcon?.setBounds(deleteIconLeft, deleteIconTop, deleteIconRight, deleteIconBottom)
+                    deleteIcon?.draw(c)
+                }
+
+                super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
+            }
+        }).attachToRecyclerView(recyclerView)
+
         lifecycleScope.launch {
             viewModel.allStudents.collect { students ->
                 adapter.submitList(students)
@@ -82,6 +198,7 @@ class MainActivity : AppCompatActivity() {
         val tvEmail = dialogView.findViewById<TextView>(R.id.tvDetailEmail)
         val tvContact = dialogView.findViewById<TextView>(R.id.tvDetailContact)
         val tvBirthplace = dialogView.findViewById<TextView>(R.id.tvDetailBirthplace)
+        val ivDetailImage = dialogView.findViewById<ImageView>(R.id.ivDetailImage)
         val btnClose = dialogView.findViewById<Button>(R.id.btnClose)
 
         tvName.text = student.name
@@ -89,6 +206,22 @@ class MainActivity : AppCompatActivity() {
         tvEmail.text = student.email
         tvContact.text = student.contact
         tvBirthplace.text = student.birthplace
+
+        if (student.imageUri != null) {
+            try {
+                val uri = Uri.parse(student.imageUri)
+                if (uri.scheme == "file") {
+                    ivDetailImage.load(File(uri.path!!))
+                } else {
+                    ivDetailImage.load(uri)
+                }
+                ivDetailImage.imageTintList = null
+            } catch (e: Exception) {
+                ivDetailImage.setImageResource(R.drawable.ic_menu_compass)
+            }
+        } else {
+            ivDetailImage.setImageResource(R.drawable.ic_menu_compass)
+        }
 
         val dialog = AlertDialog.Builder(this)
             .setView(dialogView)
@@ -131,6 +264,13 @@ class MainActivity : AppCompatActivity() {
         val spinnerGender = dialogView.findViewById<Spinner>(R.id.spinnerGender)
         val spinnerBirthplace = dialogView.findViewById<Spinner>(R.id.spinnerBirthplace)
         val btnSave = dialogView.findViewById<Button>(R.id.btnSave)
+        ivPreview = dialogView.findViewById(R.id.ivStudentImage)
+        val btnPickImage = dialogView.findViewById<FloatingActionButton>(R.id.btnPickImage)
+
+        // Setup Image Picking
+        btnPickImage.setOnClickListener {
+            pickImageLauncher.launch("image/*")
+        }
 
         // Setup Spinners
         val genderAdapter = ArrayAdapter.createFromResource(
@@ -159,6 +299,24 @@ class MainActivity : AppCompatActivity() {
             etEmail.setText(student.email)
             etContact.setText(student.contact)
             
+            if (student.imageUri != null) {
+                try {
+                    val uri = Uri.parse(student.imageUri)
+                    selectedImageUri = uri
+                    if (uri.scheme == "file") {
+                        ivPreview?.load(File(uri.path!!))
+                    } else {
+                        ivPreview?.load(uri)
+                    }
+                    ivPreview?.imageTintList = null
+                } catch (e: Exception) {
+                    selectedImageUri = null
+                    ivPreview?.setImageResource(R.drawable.ic_menu_compass)
+                }
+            } else {
+                selectedImageUri = null
+            }
+
             // Set spinner selections
             val genderPos = genderAdapter.getPosition(student.gender)
             if (genderPos >= 0) spinnerGender.setSelection(genderPos)
@@ -167,6 +325,7 @@ class MainActivity : AppCompatActivity() {
             if (countryPos >= 0) spinnerBirthplace.setSelection(countryPos)
         } else {
             txtTitle.text = "Add Student"
+            selectedImageUri = null
         }
 
         btnSave.setOnClickListener {
@@ -177,6 +336,7 @@ class MainActivity : AppCompatActivity() {
             val birthplace = spinnerBirthplace.selectedItem.toString()
 
             if (name.isNotEmpty() && email.isNotEmpty() && contact.isNotEmpty()) {
+                val imageStr = selectedImageUri?.toString()
                 if (student != null) {
                     viewModel.update(
                         student.copy(
@@ -184,7 +344,8 @@ class MainActivity : AppCompatActivity() {
                             email = email,
                             contact = contact,
                             gender = gender,
-                            birthplace = birthplace
+                            birthplace = birthplace,
+                            imageUri = imageStr
                         )
                     )
                 } else {
@@ -194,7 +355,8 @@ class MainActivity : AppCompatActivity() {
                             email = email,
                             contact = contact,
                             gender = gender,
-                            birthplace = birthplace
+                            birthplace = birthplace,
+                            imageUri = imageStr
                         )
                     )
                 }

@@ -18,12 +18,15 @@
         android:layout_height="wrap_content"
         android:padding="16dp">
 
-        <View
+        <com.google.android.material.imageview.ShapeableImageView
             android:id="@+id/viewAvatar"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:background="@drawable/ic_menu_compass"
-            android:backgroundTint="#00BFA5"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_menu_compass"
+            app:shapeAppearanceOverlay="@style/CircleImage"
+            app:strokeColor="@color/primary_teal_light"
+            app:strokeWidth="1dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 

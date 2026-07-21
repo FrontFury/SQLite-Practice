@@ -11,5 +11,6 @@ data class Student(
     val email: String,
     val contact: String,
     val gender: String,
-    val birthplace: String
+    val birthplace: String,
+    val imageUri: String? = null
 )

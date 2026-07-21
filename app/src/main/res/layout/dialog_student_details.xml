@@ -20,11 +20,14 @@
             android:background="@drawable/ic_launcher_background"
             android:backgroundTint="@color/primary_teal_light">
 
-            <ImageView
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/ivDetailImage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:layout_gravity="center"
+                android:scaleType="centerCrop"
                 android:src="@drawable/ic_menu_compass"
+                app:shapeAppearanceOverlay="@style/CircleImage"
                 app:tint="@color/primary_teal" />
         </FrameLayout>
 

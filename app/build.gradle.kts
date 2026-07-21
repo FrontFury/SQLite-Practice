@@ -65,4 +65,5 @@ dependencies {
     // ViewModel utilities (provides viewModelScope)
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycleVersion")
 
+    implementation("io.coil-kt:coil:2.6.0")
 }

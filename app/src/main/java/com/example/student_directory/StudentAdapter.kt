@@ -4,10 +4,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 
 class StudentAdapter(
     private val onItemClick: (Student) -> Unit,
@@ -34,6 +36,7 @@ class StudentAdapter(
         private val txtBirthplace: TextView = itemView.findViewById(R.id.txtBirthplace)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btnEdit)
         private val btnDelete: ImageButton = itemView.findViewById(R.id.btnDelete)
+        private val viewAvatar: ImageView = itemView.findViewById(R.id.viewAvatar)
 
         fun bind(
             student: Student,
@@ -46,6 +49,28 @@ class StudentAdapter(
             txtContact.text = student.contact
             txtGender.text = student.gender
             txtBirthplace.text = student.birthplace
+
+            if (student.imageUri != null) {
+                try {
+                    val uri = android.net.Uri.parse(student.imageUri)
+                    if (uri.scheme == "file") {
+                        viewAvatar.load(java.io.File(uri.path!!))
+                    } else {
+                        viewAvatar.load(uri)
+                    }
+                    viewAvatar.imageTintList = null
+                } catch (e: Exception) {
+                    viewAvatar.setImageResource(R.drawable.ic_menu_compass)
+                    viewAvatar.imageTintList = android.content.res.ColorStateList.valueOf(
+                        androidx.core.content.ContextCompat.getColor(itemView.context, R.color.primary_teal)
+                    )
+                }
+            } else {
+                viewAvatar.setImageResource(R.drawable.ic_menu_compass)
+                viewAvatar.imageTintList = android.content.res.ColorStateList.valueOf(
+                    androidx.core.content.ContextCompat.getColor(itemView.context, R.color.primary_teal)
+                )
+            }
             
             itemView.setOnClickListener { onItemClick(student) }
             btnEdit.setOnClickListener { onEditClick(student) }
