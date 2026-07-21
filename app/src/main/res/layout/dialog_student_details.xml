@@ -173,8 +173,8 @@
             android:textAllCaps="false"
             android:textSize="16sp"
             android:textStyle="bold"
-            app:backgroundTint="#F5F5F5"
-            android:textColor="@color/primary_teal"
+            app:backgroundTint="@color/primary_teal"
+            android:textColor="@color/white"
             app:cornerRadius="12dp"
             style="@style/Widget.MaterialComponents.Button.UnelevatedButton"/>
 

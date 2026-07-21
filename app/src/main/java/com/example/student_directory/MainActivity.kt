@@ -1,7 +1,9 @@
 package com.example.student_directory
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import android.view.LayoutInflater
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -9,6 +11,7 @@ import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.ImageButton
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -28,16 +31,30 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import coil.load
 import coil.transform.CircleCropTransformation
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private var selectedImageUri: Uri? = null
     private var ivPreview: ImageView? = null
+    private var activeVoiceEditText: TextInputEditText? = null
+
+    private val speechRecognizerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
+            val results = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            if (!results.isNullOrEmpty()) {
+                activeVoiceEditText?.setText(results[0])
+                // Move cursor to the end
+                activeVoiceEditText?.setSelection(activeVoiceEditText?.text?.length ?: 0)
+            }
+        }
+    }
 
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
@@ -100,7 +117,7 @@ class MainActivity : AppCompatActivity() {
         val adapter = StudentAdapter(
             onItemClick = { student -> showDetailsDialog(student) },
             onEditClick = { student -> showAddEditDialog(student) },
-            onDeleteClick = { student -> viewModel.delete(student) }
+            onDeleteClick = { student -> showDeleteConfirmation(student) }
         )
 
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -123,14 +140,40 @@ class MainActivity : AppCompatActivity() {
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
                 val position = viewHolder.adapterPosition
                 val student = adapter.currentList[position]
+
+                val dialogView = LayoutInflater.from(this@MainActivity).inflate(R.layout.dialog_confirm_delete, null)
+                val tvMessage = dialogView.findViewById<TextView>(R.id.tvConfirmMessage)
+                val btnCancel = dialogView.findViewById<Button>(R.id.btnCancelDelete)
+                val btnDelete = dialogView.findViewById<Button>(R.id.btnConfirmDelete)
+
+                tvMessage.text = "Are you sure you want to delete ${student.name}?"
+
+                val dialog = AlertDialog.Builder(this@MainActivity)
+                    .setView(dialogView)
+                    .create()
                 
-                viewModel.delete(student)
-                
-                Snackbar.make(recyclerView, "${student.name} deleted", Snackbar.LENGTH_LONG)
-                    .setAnchorView(fabAdd)
-                    .setAction("Undo") {
-                        viewModel.insert(student)
-                    }.show()
+                dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+                btnCancel.setOnClickListener {
+                    adapter.notifyItemChanged(position)
+                    dialog.dismiss()
+                }
+
+                btnDelete.setOnClickListener {
+                    viewModel.delete(student)
+                    Snackbar.make(recyclerView, "${student.name} deleted", Snackbar.LENGTH_LONG)
+                        .setAnchorView(fabAdd)
+                        .setAction("Undo") {
+                            viewModel.insert(student)
+                        }.show()
+                    dialog.dismiss()
+                }
+
+                dialog.setOnCancelListener {
+                    adapter.notifyItemChanged(position)
+                }
+
+                dialog.show()
             }
 
             override fun onChildDraw(
@@ -188,6 +231,54 @@ class MainActivity : AppCompatActivity() {
 
         fabAdd.setOnClickListener {
             showAddEditDialog(null)
+        }
+    }
+
+    private fun showDeleteConfirmation(student: Student) {
+        val recyclerView = findViewById<RecyclerView>(R.id.recyclerView)
+        val fabAdd = findViewById<FloatingActionButton>(R.id.fabAdd)
+
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_confirm_delete, null)
+        val tvMessage = dialogView.findViewById<TextView>(R.id.tvConfirmMessage)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btnCancelDelete)
+        val btnDelete = dialogView.findViewById<Button>(R.id.btnConfirmDelete)
+
+        tvMessage.text = "Are you sure you want to delete ${student.name}?"
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        btnDelete.setOnClickListener {
+            viewModel.delete(student)
+            Snackbar.make(recyclerView, "${student.name} deleted", Snackbar.LENGTH_LONG)
+                .setAnchorView(fabAdd)
+                .setAction("Undo") {
+                    viewModel.insert(student)
+                }.show()
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    private fun startVoiceInput(targetEditText: TextInputEditText) {
+        activeVoiceEditText = targetEditText
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
+        }
+        try {
+            speechRecognizerLauncher.launch(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Voice input not supported on this device", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -261,11 +352,19 @@ class MainActivity : AppCompatActivity() {
         val etName = dialogView.findViewById<TextInputEditText>(R.id.etName)
         val etEmail = dialogView.findViewById<TextInputEditText>(R.id.etEmail)
         val etContact = dialogView.findViewById<TextInputEditText>(R.id.etContact)
+        val tilName = dialogView.findViewById<TextInputLayout>(R.id.tilName)
+        val tilEmail = dialogView.findViewById<TextInputLayout>(R.id.tilEmail)
+        val tilContact = dialogView.findViewById<TextInputLayout>(R.id.tilContact)
         val spinnerGender = dialogView.findViewById<Spinner>(R.id.spinnerGender)
         val spinnerBirthplace = dialogView.findViewById<Spinner>(R.id.spinnerBirthplace)
         val btnSave = dialogView.findViewById<Button>(R.id.btnSave)
         ivPreview = dialogView.findViewById(R.id.ivStudentImage)
         val btnPickImage = dialogView.findViewById<FloatingActionButton>(R.id.btnPickImage)
+
+        // Setup Voice Input
+        tilName.setEndIconOnClickListener { startVoiceInput(etName) }
+        tilEmail.setEndIconOnClickListener { startVoiceInput(etEmail) }
+        tilContact.setEndIconOnClickListener { startVoiceInput(etContact) }
 
         // Setup Image Picking
         btnPickImage.setOnClickListener {
@@ -292,6 +391,9 @@ class MainActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this)
             .setView(dialogView)
             .create()
+
+        // Make background transparent to see rounded corners and glass effect
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
         if (student != null) {
             txtTitle.text = "Edit Student"
