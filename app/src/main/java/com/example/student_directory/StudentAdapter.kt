@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 
 class StudentAdapter(
+    private val onItemClick: (Student) -> Unit,
     private val onEditClick: (Student) -> Unit,
     private val onDeleteClick: (Student) -> Unit
 ) : ListAdapter<Student, StudentAdapter.StudentViewHolder>(StudentDiffCallback()) {
@@ -22,7 +23,7 @@ class StudentAdapter(
 
     override fun onBindViewHolder(holder: StudentViewHolder, position: Int) {
         val student = getItem(position)
-        holder.bind(student, onEditClick, onDeleteClick)
+        holder.bind(student, onItemClick, onEditClick, onDeleteClick)
     }
 
     class StudentViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -34,12 +35,19 @@ class StudentAdapter(
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btnEdit)
         private val btnDelete: ImageButton = itemView.findViewById(R.id.btnDelete)
 
-        fun bind(student: Student, onEditClick: (Student) -> Unit, onDeleteClick: (Student) -> Unit) {
+        fun bind(
+            student: Student,
+            onItemClick: (Student) -> Unit,
+            onEditClick: (Student) -> Unit,
+            onDeleteClick: (Student) -> Unit
+        ) {
             txtName.text = student.name
             txtEmail.text = student.email
-            txtContact.text = "Contact: ${student.contact}"
-            txtGender.text = "Gender: ${student.gender}"
-            txtBirthplace.text = "Birthplace: ${student.birthplace}"
+            txtContact.text = student.contact
+            txtGender.text = student.gender
+            txtBirthplace.text = student.birthplace
+            
+            itemView.setOnClickListener { onItemClick(student) }
             btnEdit.setOnClickListener { onEditClick(student) }
             btnDelete.setOnClickListener { onDeleteClick(student) }
         }

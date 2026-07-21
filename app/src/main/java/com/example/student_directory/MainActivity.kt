@@ -6,12 +6,14 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.ImageButton
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -40,8 +42,12 @@ class MainActivity : AppCompatActivity() {
 
         val recyclerView = findViewById<RecyclerView>(R.id.recyclerView)
         val fabAdd = findViewById<FloatingActionButton>(R.id.fabAdd)
+        val tvTotalStudents = findViewById<TextView>(R.id.tvTotalStudents)
+        val etSearch = findViewById<TextInputEditText>(R.id.etSearch)
+        val btnSort = findViewById<ImageButton>(R.id.btnSort)
 
         val adapter = StudentAdapter(
+            onItemClick = { student -> showDetailsDialog(student) },
             onEditClick = { student -> showAddEditDialog(student) },
             onDeleteClick = { student -> viewModel.delete(student) }
         )
@@ -52,12 +58,68 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.allStudents.collect { students ->
                 adapter.submitList(students)
+                tvTotalStudents.text = "Total Students: ${students.size}"
             }
+        }
+
+        etSearch.addTextChangedListener { text ->
+            viewModel.setSearchQuery(text.toString())
+        }
+
+        btnSort.setOnClickListener {
+            showSortDialog()
         }
 
         fabAdd.setOnClickListener {
             showAddEditDialog(null)
         }
+    }
+
+    private fun showDetailsDialog(student: Student) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_student_details, null)
+        val tvName = dialogView.findViewById<TextView>(R.id.tvDetailName)
+        val tvGender = dialogView.findViewById<TextView>(R.id.tvDetailGender)
+        val tvEmail = dialogView.findViewById<TextView>(R.id.tvDetailEmail)
+        val tvContact = dialogView.findViewById<TextView>(R.id.tvDetailContact)
+        val tvBirthplace = dialogView.findViewById<TextView>(R.id.tvDetailBirthplace)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnClose)
+
+        tvName.text = student.name
+        tvGender.text = student.gender
+        tvEmail.text = student.email
+        tvContact.text = student.contact
+        tvBirthplace.text = student.birthplace
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+        
+        // Make background transparent to see rounded corners of card
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    private fun showSortDialog() {
+        val options = arrayOf("A-Z", "Z-A", "Newest", "Oldest")
+        
+        AlertDialog.Builder(this)
+            .setTitle("Sort Students")
+            .setItems(options) { _, which ->
+                val order = when (which) {
+                    0 -> SortOrder.A_Z
+                    1 -> SortOrder.Z_A
+                    2 -> SortOrder.NEWEST
+                    3 -> SortOrder.OLDEST
+                    else -> SortOrder.NEWEST
+                }
+                viewModel.setSortOrder(order)
+            }
+            .show()
     }
 
     private fun showAddEditDialog(student: Student?) {

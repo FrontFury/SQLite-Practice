@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Student_Directory</string>
+    <string name="app_name">SQLite</string>
 
     <string-array name="gender_array">
         <item>Male</item>

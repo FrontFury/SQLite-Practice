@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Student_Directory"
+rootProject.name = "SQLite"
 include(":app")
  
